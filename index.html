@@ -10,11 +10,12 @@
     --muted:#94a3b8; --accent:#3b82f6; --ok:#10b981; --ko:#ef4444;
     --warn:#f59e0b; --border:#334155;
   }
-  body.light{
+  body.light, html.light{
     --bg:#f1f5f9; --card:#ffffff; --card2:#e2e8f0; --text:#0f172a;
     --muted:#64748b; --accent:#2563eb; --ok:#059669; --ko:#dc2626;
     --warn:#d97706; --border:#cbd5e1;
   }
+  html.light{ background:#f1f5f9; }
   html,body{transition:background-color .2s,color .2s}
   body.light #btn-reset{color:#dc2626!important;border-color:rgba(220,38,38,.5)!important}
   body.light .review-item .a{color:var(--ok)}
@@ -102,7 +103,7 @@
   .resume-title{font-weight:700;font-size:16px}
   .resume-actions{display:flex;gap:8px;align-items:center}
   .resume-actions button:first-child{background:var(--warn)}
-  footer{color:var(--muted);font-size:12px;text-align:center;margin:20px 0}
+  footer{color:var(--muted);font-size:12px;text-align:center;margin:20px 0;padding-bottom:80px}
   footer b{color:var(--text)}
   .donate{margin-top:12px;padding-top:10px;border-top:1px dashed var(--border)}
   .donate .msg{margin-bottom:8px;color:var(--text);font-size:13px}
@@ -386,6 +387,10 @@
       <div class="msg">Ti &egrave; stata utile l'app? Offrimi un caff&egrave; &#9749;</div>
       <a class="btn-donate revolut" href="https://revolut.me/giovancw2d" target="_blank" rel="noopener">Revolut</a>
       <a class="btn-donate paypal" href="https://www.paypal.com/donate/?business=gioparadiso95@gmail.com&amp;currency_code=EUR" target="_blank" rel="noopener">PayPal</a>
+      <div style="margin-top:10px;color:var(--muted);font-size:12px;line-height:1.5">
+        L'app &egrave; e rester&agrave; <b style="color:var(--text)">completamente gratuita</b>.<br>
+        Il tuo supporto mi aiuta a tenerla aggiornata e migliorarla nel tempo. Grazie! &#128591;
+      </div>
     </div>
   </footer>
 </div>
@@ -791,6 +796,7 @@ function sessionModeLabel(s){
 }
 function saveSession(){
   if(!state || state.finished || !state.items || state.idx >= state.items.length){ return; }
+  if(state.mode !== 'sim'){ return; }
   const snap = JSON.parse(JSON.stringify(state));
   if(state.timerEnd){
     snap.timeLeft = Math.max(0, Math.round((state.timerEnd - Date.now())/1000));
@@ -814,7 +820,7 @@ function resumeSession(){
   renderQuiz();
 }
 function discardSession(){
-  if(!confirm('Scartare la sessione in sospeso? I progressi non salvati andranno persi.')) return;
+  if(!confirm('Chiudere la sessione in corso?')) return;
   store.suspended = null;
   saveStore();
   showHome();
@@ -1133,6 +1139,7 @@ const THEME_KEY = 'asl_bari_quiz_theme';
 function applyTheme(mode){
   const light = mode === 'light';
   document.body.classList.toggle('light', light);
+  document.documentElement.classList.toggle('light', light);
   const btn = document.getElementById('btn-theme');
   if(btn) btn.innerHTML = light ? '☀️ Giorno' : '🌙 Notte';
 }
