@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🩺</text></svg>">
-<title>Prova scritta per infermieri - Bari</title>
+<title>Prova scritta e pratica per infermieri</title>
 <style>
   :root{
     --bg:#0f172a; --card:#1e293b; --card2:#273349; --text:#e2e8f0;
@@ -200,7 +200,7 @@
 <div class="container">
   <header>
     <div>
-      <h1>Prova scritta per infermieri - Bari</h1>
+      <h1>Prova scritta e pratica per infermieri - Bari</h1>
       <div class="sub">Banca dati 3.000 quesiti &middot; 19 temi &middot; <a href="#app-footer" class="author-link" onclick="document.getElementById('app-footer').scrollIntoView({behavior:'smooth'});return false;">by Giovanni Paradiso</a></div>
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap">
@@ -246,6 +246,10 @@
         <div class="card" onclick="showFavorites()">
           <h3>⭐ Preferiti</h3>
           <p id="fav-count-label">0 quesiti preferiti</p>
+        </div>
+        <div class="card" onclick="startTrainingInOrder()">
+          <h3>📄 Rispondi in ordine come nel PDF</h3>
+          <p>Quesiti dal numero 1 in su, nell'ordine del PDF, con feedback immediato.</p>
         </div>
         <div class="card" onclick="showStats()">
           <h3>📊 Statistiche</h3>
@@ -341,6 +345,7 @@
       <div class="row" style="justify-content:center;margin-top:16px">
         <button onclick="showHome()">Torna alla home</button>
         <button class="btn-sec" id="r-review-wrong" onclick="reviewWrongThisRun()">Rivedi solo sbagliati</button>
+        <button class="btn-sec" id="r-review-all" onclick="reviewAllThisRun()">Rivedi intero quiz</button>
       </div>
     </div>
   </section>
@@ -660,6 +665,31 @@ function reviewWrongThisRun(){
   };
   renderQuiz();
 }
+function reviewAllThisRun(){
+  if(!state || !state.items || !state.items.length){ alert('Nessun quesito da rivedere.'); return; }
+  const prevItems = state.items.map(it => Object.assign({}, it));
+  prevItems.forEach(it => { if(it.userChoice !== undefined) it.answered = true; });
+  state = {
+    mode:'debrief',
+    items: prevItems,
+    idx:0, ok:0, ko:0, skipped:0,
+    wrongThisRun:[],
+    timerEnd:null,
+  };
+  renderQuiz();
+}
+function startTrainingInOrder(){
+  const ids = QUESTIONS.map(q=>q.id);
+  state = {
+    mode:'ordered',
+    items: buildQuizOrder(ids),
+    idx:0, ok:0, ko:0, skipped:0,
+    wrongThisRun:[],
+    timerEnd:null,
+    poolSize: ids.length,
+  };
+  renderQuiz();
+}
 
 // ============ QUIZ RENDER ============
 function renderQuiz(){
@@ -670,10 +700,12 @@ function renderQuiz(){
     state.mode==='sim' ? ('Simulazione '+state.n+'q \u00b7 '+state.minutes+'min') :
     state.mode==='theme' ? ('Tema: '+state.themeName) :
     state.mode==='favorites' ? '⭐ Preferiti' :
+    state.mode==='ordered' ? '📄 Ordine PDF' :
+    state.mode==='debrief' ? '🔍 Revisione quiz' :
     'Ripasso sbagliati';
   document.getElementById('quiz-counter').textContent = (state.idx+1)+'/'+state.items.length;
   const scoreChip = document.getElementById('quiz-score');
-  if(state.mode === 'sim'){
+  if(state.mode === 'sim' || state.mode === 'debrief'){
     scoreChip.classList.add('hidden');
     scoreChip.textContent = '';
   } else {
@@ -701,7 +733,22 @@ function renderQuiz(){
   const nextBtn = document.getElementById('quiz-next');
   const skipBtn = document.getElementById('quiz-skip');
 
-  if(state.mode === 'sim'){
+  if(state.mode === 'debrief'){
+    if(it.answered){
+      renderAnsweredState(it);
+    } else {
+      const correctIdx = it.options.findIndex(o=>o.correct);
+      const btns2 = document.querySelectorAll('#quiz-options .opt');
+      btns2.forEach((b,idx)=>{ b.disabled=true; if(idx===correctIdx) b.classList.add('correct'); });
+      const fb = document.getElementById('quiz-feedback');
+      fb.className='feedback ok'; fb.style.display='block';
+      fb.innerHTML='\u2139\ufe0f Non risposto. Risposta corretta: <b>'+String.fromCharCode(65+correctIdx)+'</b> &mdash; '+escapeHtml(it.options[correctIdx].text);
+    }
+    prevBtn.classList.toggle('hidden', state.idx === 0);
+    nextBtn.classList.remove('hidden');
+    skipBtn.classList.add('hidden');
+    nextBtn.textContent = (state.idx === state.items.length - 1) ? 'Fine \u2192' : 'Avanti \u2192';
+  } else if(state.mode === 'sim'){
     if(typeof it.userChoice === 'number'){
       const btns = document.querySelectorAll('#quiz-options .opt');
       btns.forEach((b,idx)=>{
@@ -809,6 +856,7 @@ function sessionModeLabel(s){
     s.mode==='sim' ? ('Simulazione esame · '+s.n+'q') :
     s.mode==='theme' ? ('Tema: '+(s.themeName||'')) :
     s.mode==='favorites' ? '⭐ Preferiti' :
+    s.mode==='ordered' ? '📄 Ordine PDF' :
     'Ripasso sbagliati';
 }
 function saveSession(){
@@ -870,6 +918,7 @@ function prevQuestion(){
 }
 
 function endQuiz(forced){
+  if(state.mode === 'debrief'){ showHome(); return; }
   if(state.mode === 'sim'){
     state.ok = 0; state.ko = 0; state.skipped = 0;
     state.wrongThisRun = [];
@@ -923,10 +972,13 @@ function endQuiz(forced){
     state.mode==='sim' ? ('Simulazione esame \u00b7 '+state.minutes+' min') :
     state.mode==='theme' ? ('Tema: '+state.themeName) :
     state.mode==='favorites' ? '⭐ Preferiti' :
+    state.mode==='ordered' ? '📄 Ordine PDF' :
     state.mode==='review' ? 'Ripasso sbagliati' : 'Allenamento';
   document.getElementById('result-detail').textContent =
     pct>=60 ? 'Buon risultato!' : 'Continua ad allenarti.';
   document.getElementById('r-review-wrong').classList.toggle('hidden', state.wrongThisRun.length===0);
+  const answeredCount = state.items.filter(it=>it.answered || it.userChoice !== undefined).length;
+  document.getElementById('r-review-all').classList.toggle('hidden', answeredCount===0);
   show('screen-result');
   if(timerInterval){clearInterval(timerInterval);timerInterval=null;}
 }
@@ -1210,4 +1262,5 @@ document.addEventListener('click', function(e){
 </div>
 
 </body>
+
 </html>
