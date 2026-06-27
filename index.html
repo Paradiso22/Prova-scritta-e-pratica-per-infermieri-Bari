@@ -662,7 +662,7 @@ function reviewWrongThisRun(){
 
 // ============ QUIZ RENDER ============
 function renderQuiz(){
-  show('screen-quiz');
+  if(document.getElementById('screen-quiz').classList.contains('hidden')) show('screen-quiz');
   const it = state.items[state.idx];
   document.getElementById('quiz-mode').textContent =
     state.mode==='training' ? 'Allenamento' :
