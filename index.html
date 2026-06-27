@@ -748,6 +748,17 @@ function renderQuiz(){
     nextBtn.classList.remove('hidden');
     skipBtn.classList.add('hidden');
     nextBtn.textContent = (state.idx === state.items.length - 1) ? 'Fine \u2192' : 'Avanti \u2192';
+  } else if(state.mode === 'ordered'){
+    prevBtn.classList.toggle('hidden', state.idx === 0);
+    if(it.answered){
+      renderAnsweredState(it);
+      nextBtn.classList.remove('hidden');
+      skipBtn.classList.add('hidden');
+    } else {
+      nextBtn.classList.add('hidden');
+      skipBtn.classList.remove('hidden');
+    }
+    nextBtn.textContent = (state.idx === state.items.length - 1) ? 'Termina \u2192' : 'Avanti \u2192';
   } else if(state.mode === 'sim'){
     if(typeof it.userChoice === 'number'){
       const btns = document.querySelectorAll('#quiz-options .opt');
@@ -856,12 +867,12 @@ function sessionModeLabel(s){
     s.mode==='sim' ? ('Simulazione esame · '+s.n+'q') :
     s.mode==='theme' ? ('Tema: '+(s.themeName||'')) :
     s.mode==='favorites' ? '⭐ Preferiti' :
-    s.mode==='ordered' ? '📄 Ordine PDF' :
+    s.mode==='ordered' ? '📄 Rispondi in ordine come nel PDF' :
     'Ripasso sbagliati';
 }
 function saveSession(){
   if(!state || state.finished || !state.items || state.idx >= state.items.length){ return; }
-  if(state.mode !== 'sim'){ return; }
+  if(state.mode !== 'sim' && state.mode !== 'ordered'){ return; }
   const snap = JSON.parse(JSON.stringify(state));
   if(state.timerEnd){
     snap.timeLeft = Math.max(0, Math.round((state.timerEnd - Date.now())/1000));
