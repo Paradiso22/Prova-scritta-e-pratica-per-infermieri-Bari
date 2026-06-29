@@ -60,6 +60,7 @@
   .mode-grid p{margin:0;color:var(--muted);font-size:14px}
   .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:8px;margin-top:12px}
   #home-stats{grid-template-columns:repeat(6,minmax(0,1fr))}
+  @media(max-width:600px){#home-stats{grid-template-columns:repeat(3,1fr)}}
   .stat{background:var(--card2);border-radius:10px;padding:10px;text-align:center}
   .stat b{display:block;font-size:22px}
   .stat span{color:var(--muted);font-size:12px}
