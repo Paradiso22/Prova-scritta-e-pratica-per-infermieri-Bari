@@ -211,19 +211,7 @@
   </header>
 
   <section id="screen-home">
-    <div class="card resume-card hidden" id="resume-card">
-      <div class="resume-label">&#9208;&#65039; 1 sessione in sospeso</div>
-      <div class="resume-row">
-        <div class="resume-info">
-          <div class="resume-title" id="resume-title">Quiz</div>
-          <div class="sub" id="resume-detail">&mdash;</div>
-        </div>
-        <div class="resume-actions">
-          <button onclick="resumeSession()">&#9654; Riprendi</button>
-          <button class="btn-ghost" title="Scarta sessione" onclick="discardSession()">&times;</button>
-        </div>
-      </div>
-    </div>
+    <div id="resume-cards"></div>
     <div class="card">
       <h2 style="margin:0 0 10px">Scegli una modalit&agrave;</h2>
       <div class="grid mode-grid">
@@ -231,7 +219,7 @@
           <h3>🎯 Allenamento libero</h3>
           <p id="training-desc">Quesiti mai fatti prima, feedback immediato.</p>
         </div>
-        <div class="card" onclick="showSimSetup()">
+        <div class="card" onclick="startOrResumeSim()">
           <h3>📝 Simulazione esame</h3>
           <p>Scegli N quesiti con timer, risultato a fine quiz.</p>
         </div>
@@ -243,11 +231,15 @@
           <h3>🔄 Ripassa gli sbagliati</h3>
           <p id="wrong-count-label">0 quesiti salvati</p>
         </div>
+        <div class="card" onclick="startCorrectReview()">
+          <h3>✅ Ripassa quelle corrette</h3>
+          <p id="correct-count-label">0 quesiti corretti</p>
+        </div>
         <div class="card" onclick="showFavorites()">
           <h3>⭐ Preferiti</h3>
           <p id="fav-count-label">0 quesiti preferiti</p>
         </div>
-        <div class="card" onclick="startTrainingInOrder()">
+        <div class="card" onclick="startOrResumeOrdered()">
           <h3>📄 Rispondi in ordine come nel PDF</h3>
           <p>Quesiti dal numero 1 in su, nell'ordine del PDF, con feedback immediato.</p>
         </div>
@@ -287,6 +279,22 @@
           <div style="align-self:end">
             <button onclick="startSim(parseInt(document.getElementById('sim-n').value),parseInt(document.getElementById('sim-min').value))">Avvia</button>
           </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="screen-ordered-setup" class="hidden">
+    <div class="card">
+      <h2 style="margin:0 0 12px">Rispondi in ordine come nel PDF</h2>
+      <div class="sub" style="margin-bottom:16px">Scegli il numero di quesito da cui partire (1&ndash;3000). Puoi lasciare 1 per iniziare dall'inizio.</div>
+      <div class="row" style="margin:0 0 14px;align-items:flex-end;gap:12px">
+        <div>
+          <label>Parti dal quesito n°</label>
+          <input type="number" id="ordered-from" min="1" max="3000" value="1">
+        </div>
+        <div>
+          <button onclick="startTrainingInOrder(parseInt(document.getElementById('ordered-from').value)||1)">Avvia</button>
         </div>
       </div>
     </div>
@@ -425,6 +433,8 @@ const THEMES = JSON.parse(document.getElementById('quiz-themes').textContent);
 // RAW: [id, q, A, B, C, themeIdx]
 const QUESTIONS = RAW.map(r => ({id:r[0], q:r[1], correct:r[2], wrong:[r[3], r[4]], theme:r[5]}));
 const TOT = QUESTIONS.length;
+const Q_NUM = {};
+QUESTIONS.forEach((q,i)=>{ Q_NUM[q.id] = i+1; });
 const BY_THEME = {};
 QUESTIONS.forEach(q=>{
   if(!BY_THEME[q.theme]) BY_THEME[q.theme] = [];
@@ -445,9 +455,10 @@ function loadStore(){
       totalCorrect: s.totalCorrect||0,
       perQ: s.perQ||{},
       history: Array.isArray(s.history) ? s.history : [],
-      suspended: s.suspended || null
+      suspendedSim: s.suspendedSim || (s.suspended && s.suspended.mode==='sim' ? s.suspended : null),
+      suspendedOrdered: s.suspendedOrdered || (s.suspended && s.suspended.mode==='ordered' ? s.suspended : null),
     };
-  }catch(e){ return {wrongIds:[],favorites:[],totalAnswered:0,totalCorrect:0,perQ:{},history:[],suspended:null}; }
+  }catch(e){ return {wrongIds:[],favorites:[],totalAnswered:0,totalCorrect:0,perQ:{},history:[],suspendedSim:null,suspendedOrdered:null}; }
 }
 function saveStore(){ localStorage.setItem(LS_KEY, JSON.stringify(store)); }
 
@@ -464,20 +475,21 @@ function fmtTime(s){
   return String(m).padStart(2,'0')+':'+String(r).padStart(2,'0');
 }
 function show(id){
-  ['screen-home','screen-sim-setup','screen-themes','screen-quiz','screen-result','screen-stats','screen-browse','screen-favorites']
+  ['screen-home','screen-sim-setup','screen-ordered-setup','screen-themes','screen-quiz','screen-result','screen-stats','screen-browse','screen-favorites']
     .forEach(s => document.getElementById(s).classList.toggle('hidden', s!==id));
   window.scrollTo(0,0);
 }
 function buildQuizOrder(ids){
   return ids.map(id => {
     const q = QUESTIONS.find(x=>x.id===id);
+    if(!q) return null;
     const opts = shuffle([
       {text:q.correct, correct:true},
       {text:q.wrong[0], correct:false},
       {text:q.wrong[1], correct:false},
     ]);
     return {id:q.id, q:q.q, options:opts, theme:q.theme};
-  });
+  }).filter(Boolean);
 }
 function escapeHtml(s){
   return String(s).replace(/[&<>"']/g, function(c){return ({
@@ -507,6 +519,9 @@ function showHome(){
   show('screen-home');
   document.getElementById('wrong-count-label').textContent =
     store.wrongIds.length + ' quesiti salvati';
+  const correctCount = Object.values(store.perQ).filter(v=>v&&v.ok>0).length;
+  document.getElementById('correct-count-label').textContent =
+    correctCount + ' quesiti corretti';
   updateFavCountLabel();
   renderResumeCard();
   renderHomeStats();
@@ -653,6 +668,25 @@ function startReview(){
   };
   renderQuiz();
 }
+function startCorrectReview(){
+  const correctIds = Object.keys(store.perQ)
+    .filter(id => store.perQ[id] && store.perQ[id].ok > 0)
+    .map(Number)
+    .filter(id => QUESTIONS.some(q=>q.id===id));
+  if(!correctIds.length){
+    alert('Nessun quesito risposto correttamente. Fai qualche quiz prima!');
+    return;
+  }
+  const ids = shuffle(correctIds);
+  state = {
+    mode:'correct',
+    items: buildQuizOrder(ids),
+    idx:0, ok:0, ko:0, skipped:0,
+    wrongThisRun:[],
+    timerEnd:null,
+  };
+  renderQuiz();
+}
 function reviewWrongThisRun(){
   const ids = state && state.wrongThisRun ? state.wrongThisRun : [];
   if(!ids.length){ alert('Nessuno sbagliato in questo quiz.'); return; }
@@ -678,8 +712,12 @@ function reviewAllThisRun(){
   };
   renderQuiz();
 }
-function startTrainingInOrder(){
-  const ids = QUESTIONS.map(q=>q.id);
+function showOrderedSetup(){ show('screen-ordered-setup'); }
+function startOrResumeSim(){ if(store.suspendedSim) resumeSession('sim'); else showSimSetup(); }
+function startOrResumeOrdered(){ if(store.suspendedOrdered) resumeSession('ordered'); else showOrderedSetup(); }
+function startTrainingInOrder(fromN){
+  fromN = Math.max(1, Math.min(fromN||1, QUESTIONS.length));
+  const ids = QUESTIONS.slice(fromN-1).map(q=>q.id);
   state = {
     mode:'ordered',
     items: buildQuizOrder(ids),
@@ -687,6 +725,7 @@ function startTrainingInOrder(){
     wrongThisRun:[],
     timerEnd:null,
     poolSize: ids.length,
+    startFrom: fromN,
   };
   renderQuiz();
 }
@@ -702,6 +741,7 @@ function renderQuiz(){
     state.mode==='favorites' ? '⭐ Preferiti' :
     state.mode==='ordered' ? '📄 Ordine PDF' :
     state.mode==='debrief' ? '🔍 Revisione quiz' :
+    state.mode==='correct' ? '✅ Ripasso corrette' :
     'Ripasso sbagliati';
   document.getElementById('quiz-counter').textContent = (state.idx+1)+'/'+state.items.length;
   const scoreChip = document.getElementById('quiz-score');
@@ -713,7 +753,7 @@ function renderQuiz(){
     scoreChip.textContent = state.ok+' ok \u00b7 '+state.ko+' ko';
   }
   document.getElementById('quiz-progress').style.width = (state.idx/state.items.length*100)+'%';
-  document.getElementById('quiz-qnum').textContent = 'Quesito ID '+it.id+' \u00b7 '+THEMES[it.theme];
+  document.getElementById('quiz-qnum').textContent = 'n\u00b0 '+(Q_NUM[it.id]||'?')+' \u00b7 ID '+it.id+' \u00b7 '+THEMES[it.theme];
   document.getElementById('quiz-qtext').textContent = it.q;
   const optsEl = document.getElementById('quiz-options');
   optsEl.innerHTML = '';
@@ -867,7 +907,8 @@ function sessionModeLabel(s){
     s.mode==='sim' ? ('Simulazione esame · '+s.n+'q') :
     s.mode==='theme' ? ('Tema: '+(s.themeName||'')) :
     s.mode==='favorites' ? '⭐ Preferiti' :
-    s.mode==='ordered' ? '📄 Rispondi in ordine come nel PDF' :
+    s.mode==='ordered' ? ('📄 Ordine PDF (quesito '+((s.startFrom||1) + s.idx)+')') :
+    s.mode==='correct' ? '✅ Ripasso corrette' :
     'Ripasso sbagliati';
 }
 function saveSession(){
@@ -879,13 +920,17 @@ function saveSession(){
   }
   delete snap.timerEnd;
   snap.savedAt = Date.now();
-  store.suspended = snap;
+  if(state.mode === 'sim') store.suspendedSim = snap;
+  else store.suspendedOrdered = snap;
   saveStore();
 }
-function resumeSession(){
-  if(!store.suspended) return;
-  state = store.suspended;
-  store.suspended = null;
+function resumeSession(type){
+  const snap = type === 'sim' ? store.suspendedSim : store.suspendedOrdered;
+  if(!snap) return;
+  if(state && state.items && !state.finished) saveSession();
+  state = snap;
+  if(type === 'sim') store.suspendedSim = null;
+  else store.suspendedOrdered = null;
   saveStore();
   if(typeof state.timeLeft === 'number'){
     state.timerEnd = Date.now() + state.timeLeft*1000;
@@ -895,21 +940,40 @@ function resumeSession(){
   delete state.timeLeft;
   renderQuiz();
 }
-function discardSession(){
-  if(!confirm('Chiudere la sessione in corso?')) return;
-  store.suspended = null;
+function discardSession(type){
+  if(!confirm('Chiudere la sessione in sospeso?')) return;
+  if(type === 'sim') store.suspendedSim = null;
+  else store.suspendedOrdered = null;
   saveStore();
-  showHome();
+  renderResumeCard();
 }
 function renderResumeCard(){
-  const rc = document.getElementById('resume-card');
-  const s = store.suspended;
-  if(!s || !s.items){ rc.classList.add('hidden'); return; }
-  rc.classList.remove('hidden');
-  document.getElementById('resume-title').textContent = sessionModeLabel(s);
-  let detail = 'Domanda '+(s.idx+1)+' di '+s.items.length;
-  if(typeof s.timeLeft === 'number') detail += ' · '+fmtTime(s.timeLeft)+' rimasti';
-  document.getElementById('resume-detail').textContent = detail;
+  const container = document.getElementById('resume-cards');
+  container.innerHTML = '';
+  [['sim', store.suspendedSim], ['ordered', store.suspendedOrdered]].forEach(function(pair){
+    const type = pair[0], s = pair[1];
+    if(!s || !s.items) return;
+    const card = document.createElement('div');
+    card.className = 'card resume-card';
+    card.style.marginBottom = '12px';
+    card.style.cursor = 'pointer';
+    card.addEventListener('click', function(){ resumeSession(type); });
+    let detail = 'Domanda '+(s.idx+1)+' di '+s.items.length;
+    if(typeof s.timeLeft === 'number') detail += ' · '+fmtTime(s.timeLeft)+' rimasti';
+    card.innerHTML =
+      '<div class="resume-label">⏸️ Sessione in sospeso &mdash; clicca per riprendere</div>'+
+      '<div class="resume-row">'+
+        '<div class="resume-info">'+
+          '<div class="resume-title">'+sessionModeLabel(s)+'</div>'+
+          '<div class="sub">'+detail+'</div>'+
+        '</div>'+
+        '<div class="resume-actions">'+
+          '<button onclick="event.stopPropagation();resumeSession(\''+type+'\')">&#9654; Riprendi</button>'+
+          '<button onclick="event.stopPropagation();discardSession(\''+type+'\')" class="btn-ghost" title="Scarta sessione">&times;</button>'+
+        '</div>'+
+      '</div>';
+    container.appendChild(card);
+  });
 }
 
 function skipQuestion(){
@@ -966,7 +1030,8 @@ function endQuiz(forced){
   };
   store.history.unshift(entry);
   if(store.history.length>50) store.history.length=50;
-  store.suspended = null;
+  if(state.mode === 'sim') store.suspendedSim = null;
+  else if(state.mode === 'ordered') store.suspendedOrdered = null;
   saveStore();
   state.finished = true;
 
@@ -984,6 +1049,7 @@ function endQuiz(forced){
     state.mode==='theme' ? ('Tema: '+state.themeName) :
     state.mode==='favorites' ? '⭐ Preferiti' :
     state.mode==='ordered' ? '📄 Ordine PDF' :
+    state.mode==='correct' ? '✅ Ripasso corrette' :
     state.mode==='review' ? 'Ripasso sbagliati' : 'Allenamento';
   document.getElementById('result-detail').textContent =
     pct>=60 ? 'Buon risultato!' : 'Continua ad allenarti.';
@@ -1273,5 +1339,6 @@ document.addEventListener('click', function(e){
 </div>
 
 </body>
+
 
 </html>
