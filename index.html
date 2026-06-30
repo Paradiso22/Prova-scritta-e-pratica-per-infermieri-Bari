@@ -261,6 +261,10 @@
           <h3>&#129657; Prova pratica</h3>
           <p>204 procedure: ordina le fasi nel corretto ordine cronologico.</p>
         </div>
+        <div class="card" onclick="startOrResumePraticaSim()">
+          <h3>&#128203; Simulazione esame prova pratica</h3>
+          <p>Procedura casuale a tempo. Risultato a fine simulazione.</p>
+        </div>
         <div class="card" onclick="startPraticaReview('wrong')">
           <h3>&#128260; Ripasso errori prova pratica</h3>
           <p id="pratica-wrong-count-label">0 procedure sbagliate</p>
@@ -338,12 +342,38 @@
     </div>
   </section>
 
+  <section id="screen-pratica-sim-setup" class="hidden">
+    <div class="card">
+      <h2 style="margin:0 0 12px">&#128203; Simulazione esame prova pratica</h2>
+      <div class="row" style="margin:0 0 14px">
+        <button onclick="startPraticaSim(11,20)">11 procedure &middot; 20 min</button>
+      </div>
+      <div class="card" style="background:var(--card2)">
+        <label>Personalizzata</label>
+        <div class="row">
+          <div>
+            <label>N. procedure</label>
+            <input type="number" id="pratica-sim-n" min="1" max="204" value="11">
+          </div>
+          <div>
+            <label>Minuti</label>
+            <input type="number" id="pratica-sim-min" min="1" max="120" value="20">
+          </div>
+          <div style="align-self:end">
+            <button onclick="startPraticaSim(parseInt(document.getElementById('pratica-sim-n').value),parseInt(document.getElementById('pratica-sim-min').value))">Avvia</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <section id="screen-pratica" class="hidden">
     <div class="topbar">
       <div>
         <span class="chip">🩺 Prova pratica</span>
         <span class="chip" id="pratica-counter">0/0</span>
         <span class="chip" id="pratica-score">0 ok &middot; 0 ko</span>
+        <span class="chip timer" id="pratica-timer"></span>
       </div>
     </div>
     <div class="progress"><div id="pratica-progress"></div></div>
@@ -487,7 +517,7 @@
     I tuoi dati vengono salvati solo sul tuo dispositivo personale.<br>
     <span style="font-size:11px;color:var(--muted)">Questa applicazione non raccoglie dati personali né utilizza cookie di profilazione.</span><br>
     <span style="font-size:11px;color:var(--muted)">⚠️ Cancellare la cache o i dati del browser eliminer&agrave; i tuoi progressi.</span><br>
-    <b>Creato da Giovanni Paradiso</b> <span class="version">v.3.0.0</span>
+    <b>Creato da Giovanni Paradiso</b> <span class="version">v.3.0.1</span>
     <span class="tagline">Ecommerce Specialist, Web Developer &amp; Marketer</span>
     <div style="margin-top:8px">
       <span class="copy-email" onclick="copyEmail(this,'gioparadiso95@gmail.com')">gioparadiso95@gmail.com<span class="copy-toast">Copiata!</span></span>
@@ -537,11 +567,12 @@ function loadStore(){
       suspendedSim: s.suspendedSim || (s.suspended && s.suspended.mode==='sim' ? s.suspended : null),
       suspendedOrdered: s.suspendedOrdered || (s.suspended && s.suspended.mode==='ordered' ? s.suspended : null),
       suspendedPratica: s.suspendedPratica || null,
+      suspendedPraticaSim: s.suspendedPraticaSim || null,
       wrongPraticaNums: Array.isArray(s.wrongPraticaNums) ? s.wrongPraticaNums : [],
       correctPraticaNums: Array.isArray(s.correctPraticaNums) ? s.correctPraticaNums : [],
       favPraticaNums: Array.isArray(s.favPraticaNums) ? s.favPraticaNums : [],
     };
-  }catch(e){ return {wrongIds:[],favorites:[],totalAnswered:0,totalCorrect:0,perQ:{},history:[],suspendedSim:null,suspendedOrdered:null,suspendedPratica:null,wrongPraticaNums:[],correctPraticaNums:[],favPraticaNums:[]}; }
+  }catch(e){ return {wrongIds:[],favorites:[],totalAnswered:0,totalCorrect:0,perQ:{},history:[],suspendedSim:null,suspendedOrdered:null,suspendedPratica:null,suspendedPraticaSim:null,wrongPraticaNums:[],correctPraticaNums:[],favPraticaNums:[]}; }
 }
 function saveStore(){ localStorage.setItem(LS_KEY, JSON.stringify(store)); }
 
@@ -558,7 +589,7 @@ function fmtTime(s){
   return String(m).padStart(2,'0')+':'+String(r).padStart(2,'0');
 }
 function show(id){
-  ['screen-home','screen-sim-setup','screen-ordered-setup','screen-pratica-setup','screen-themes','screen-quiz','screen-result','screen-stats','screen-browse','screen-favorites','screen-pratica','screen-pratica-fav']
+  ['screen-home','screen-sim-setup','screen-ordered-setup','screen-pratica-setup','screen-pratica-sim-setup','screen-themes','screen-quiz','screen-result','screen-stats','screen-browse','screen-favorites','screen-pratica','screen-pratica-fav']
     .forEach(s => document.getElementById(s).classList.toggle('hidden', s!==id));
   window.scrollTo(0,0);
 }
@@ -998,6 +1029,7 @@ function sessionModeLabel(s){
     if(s.subMode==='wrong') return '🔄 Ripasso errori pratica (proc. '+(s.idx+1)+'/'+s.total+')';
     if(s.subMode==='correct') return '✅ Ripasso corrette pratica (proc. '+(s.idx+1)+'/'+s.total+')';
     if(s.subMode==='fav') return '⭐ Preferiti pratica (proc. '+(s.idx+1)+'/'+s.total+')';
+    if(s.subMode==='sim') return '📋 Simulazione esame pratica (proc. '+(s.idx+1)+'/'+s.total+')';
     return '🧺 Prova pratica (proc. n. '+(s.procList ? s.procList[s.idx] : (s.startFrom||1)+s.idx)+')';
   }
   return s.mode==='training' ? 'Allenamento libero' :
@@ -1042,27 +1074,38 @@ function discardSession(type){
   if(type === 'sim') store.suspendedSim = null;
   else if(type === 'ordered') store.suspendedOrdered = null;
   else if(type === 'pratica') store.suspendedPratica = null;
+  else if(type === 'pratica-sim') store.suspendedPraticaSim = null;
   saveStore();
   renderResumeCard();
 }
 function renderResumeCard(){
   const container = document.getElementById('resume-cards');
   container.innerHTML = '';
-  [['sim', store.suspendedSim], ['ordered', store.suspendedOrdered], ['pratica', store.suspendedPratica]].forEach(function(pair){
+  [
+    ['sim', store.suspendedSim],
+    ['ordered', store.suspendedOrdered],
+    ['pratica', store.suspendedPratica],
+    ['pratica-sim', store.suspendedPraticaSim]
+  ].forEach(function(pair){
     const type = pair[0], s = pair[1];
     if(!s) return;
-    if(type !== 'pratica' && !s.items) return;
+    const isPratica = type === 'pratica';
+    const isPraticaSim = type === 'pratica-sim';
+    if(!isPratica && !isPraticaSim && !s.items) return;
     const card = document.createElement('div');
     card.className = 'card resume-card';
     card.style.marginBottom = '12px';
     card.style.cursor = 'pointer';
-    const isPratica = type === 'pratica';
-    card.addEventListener('click', function(){ isPratica ? resumePratica() : resumeSession(type); });
-    let detail = isPratica
+    const resumeFn = isPratica ? 'resumePratica()' : isPraticaSim ? 'resumePraticaSim()' : 'resumeSession(\''+type+'\')';
+    card.addEventListener('click', function(){
+      if(isPratica) resumePratica();
+      else if(isPraticaSim) resumePraticaSim();
+      else resumeSession(type);
+    });
+    let detail = (isPratica || isPraticaSim)
       ? ('Procedura '+(s.idx+1)+' di '+s.total+' · '+(s.ok||0)+' ok · '+(s.ko||0)+' ko')
       : ('Domanda '+(s.idx+1)+' di '+s.items.length);
-    if(!isPratica && typeof s.timeLeft === 'number') detail += ' · '+fmtTime(s.timeLeft)+' rimasti';
-    const resumeFn = isPratica ? 'resumePratica()' : 'resumeSession(\''+type+'\')';
+    if(typeof s.timeLeft === 'number') detail += ' · '+fmtTime(s.timeLeft)+' rimasti';
     card.innerHTML =
       '<div class="resume-label">⏸️ Sessione in sospeso &mdash; clicca per riprendere</div>'+
       '<div class="resume-row">'+
@@ -1368,6 +1411,8 @@ document.getElementById('btn-home').onclick = function(){
   state = null;
   praticaState = null;
   if(timerInterval){clearInterval(timerInterval);timerInterval=null;}
+  if(praticaTimerInterval){clearInterval(praticaTimerInterval);praticaTimerInterval=null;}
+  const pt = document.getElementById('pratica-timer'); if(pt) pt.textContent='';
   showHome();
 };
 
@@ -1397,6 +1442,7 @@ function getPraticaData(){
 }
 
 let praticaState = null;
+let praticaTimerInterval = null;
 
 function getPraticaProc(ps, idx){
   if(ps.procList) return getPraticaData()[ps.procList[idx] - 1];
@@ -1408,7 +1454,49 @@ function getPraticaProcNum(ps, idx){
 }
 
 function showPraticaSetup(){ show('screen-pratica-setup'); }
+function showPraticaSimSetup(){ show('screen-pratica-sim-setup'); }
+function startOrResumePraticaSim(){ if(store.suspendedPraticaSim) resumePraticaSim(); else showPraticaSimSetup(); }
 function startOrResumePratica(){ if(store.suspendedPratica) resumePratica(); else showPraticaSetup(); }
+
+function startPraticaSim(n, minutes){
+  if(!n||n<1) return;
+  const data = getPraticaData();
+  n = Math.min(n, data.length);
+  if(!minutes||minutes<1) minutes=20;
+  const allNums = data.map(function(_,i){ return i+1; });
+  const picked = shuffle([...allNums]).slice(0, n);
+  praticaState = {
+    mode:'pratica', subMode:'sim',
+    procList: picked,
+    total: picked.length,
+    idx:0, ok:0, ko:0, finished:false,
+    answers: new Array(picked.length).fill(null),
+    timerEnd: Date.now() + minutes*60*1000,
+  };
+  renderPratica();
+}
+
+function updatePraticaTimer(){
+  const el = document.getElementById('pratica-timer');
+  if(!el) return;
+  if(!praticaState || !praticaState.timerEnd){ el.textContent=''; return; }
+  if(!praticaTimerInterval){
+    praticaTimerInterval = setInterval(praticaTick, 1000);
+  }
+  praticaTick();
+}
+function praticaTick(){
+  if(!praticaState || !praticaState.timerEnd){ return; }
+  const left = Math.floor((praticaState.timerEnd - Date.now())/1000);
+  const el = document.getElementById('pratica-timer');
+  if(!el) return;
+  el.textContent = '⏱ ' + fmtTime(left);
+  el.classList.toggle('low', left < 60);
+  if(left<=0){
+    clearInterval(praticaTimerInterval); praticaTimerInterval=null;
+    endPratica(true);
+  }
+}
 
 function startPratica(fromN){
   const data = getPraticaData();
@@ -1508,15 +1596,36 @@ function resumePratica(){
   praticaState = snap;
   store.suspendedPratica = null;
   saveStore();
+  praticaState.timerEnd = null;
+  delete praticaState.timeLeft;
+  renderPratica();
+}
+function resumePraticaSim(){
+  const snap = store.suspendedPraticaSim;
+  if(!snap) return;
+  praticaState = snap;
+  store.suspendedPraticaSim = null;
+  saveStore();
+  if(typeof praticaState.timeLeft === 'number'){
+    praticaState.timerEnd = Date.now() + praticaState.timeLeft*1000;
+  } else {
+    praticaState.timerEnd = null;
+  }
+  delete praticaState.timeLeft;
   renderPratica();
 }
 
 function savePraticaSession(){
   if(!praticaState || praticaState.finished) return;
-  if(praticaState.subMode !== 'sequential') return;
+  if(praticaState.subMode !== 'sequential' && praticaState.subMode !== 'sim') return;
   const snap = JSON.parse(JSON.stringify(praticaState));
+  if(praticaState.timerEnd){
+    snap.timeLeft = Math.max(0, Math.round((praticaState.timerEnd - Date.now())/1000));
+  }
+  delete snap.timerEnd;
   snap.savedAt = Date.now();
-  store.suspendedPratica = snap;
+  if(praticaState.subMode === 'sim') store.suspendedPraticaSim = snap;
+  else store.suspendedPratica = snap;
   saveStore();
 }
 
@@ -1568,7 +1677,7 @@ function renderPratica(){
     const b = document.createElement('button');
     b.className = 'opt';
     b.dataset.letter = letter;
-    b.innerHTML = '<span class="letter">'+letter+'</span>'+escapeHtml(seq.join(' → '));
+    b.innerHTML = '<span class="letter">'+letter+'</span>'+escapeHtml(seq.join(' - '));
     b.onclick = function(){ answerPratica(letter); };
     optsEl.appendChild(b);
   });
@@ -1587,6 +1696,7 @@ function renderPratica(){
   if(ans) renderPraticaAnswered(proc, ans);
 
   savePraticaSession();
+  updatePraticaTimer();
 }
 
 function answerPratica(letter){
@@ -1627,7 +1737,7 @@ function renderPraticaAnswered(proc, ans){
   });
 
   const fb = document.getElementById('pratica-feedback');
-  const corrSeqStr = escapeHtml(proc.correctSeq.join(' → '));
+  const corrSeqStr = escapeHtml(proc.correctSeq.join(' - '));
   let expl = '';
   if(proc.explanation){
     expl = '<div style="margin-top:8px;font-weight:400;font-size:13px;color:inherit;line-height:1.5">'
@@ -1687,8 +1797,11 @@ function toggleFavPratica(){
 function endPratica(forced){
   const ps = praticaState;
   ps.finished = true;
-  store.suspendedPratica = null;
+  if(ps.subMode === 'sim') store.suspendedPraticaSim = null;
+  else store.suspendedPratica = null;
   saveStore();
+  if(praticaTimerInterval){clearInterval(praticaTimerInterval);praticaTimerInterval=null;}
+  const pt = document.getElementById('pratica-timer'); if(pt) pt.textContent='';
   const answered = ps.answers.filter(Boolean).length;
   const pct = answered ? Math.round(ps.ok/answered*100) : 0;
   document.getElementById('r-ok').textContent = ps.ok;
@@ -1701,6 +1814,7 @@ function endPratica(forced){
   const modeLabel = ps.subMode==='wrong' ? '🔄 Ripasso errori pratica'
     : ps.subMode==='correct' ? '✅ Ripasso corrette pratica'
     : ps.subMode==='fav' ? '⭐ Preferiti pratica'
+    : ps.subMode==='sim' ? '📋 Simulazione esame prova pratica'
     : '🩺 Prova pratica';
   document.getElementById('result-mode').textContent = modeLabel;
   document.getElementById('result-detail').textContent = pct>=60 ? 'Ottimo risultato!' : 'Continua ad esercitarti!';
