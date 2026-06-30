@@ -517,7 +517,7 @@
     I tuoi dati vengono salvati solo sul tuo dispositivo personale.<br>
     <span style="font-size:11px;color:var(--muted)">Questa applicazione non raccoglie dati personali né utilizza cookie di profilazione.</span><br>
     <span style="font-size:11px;color:var(--muted)">⚠️ Cancellare la cache o i dati del browser eliminer&agrave; i tuoi progressi.</span><br>
-    <b>Creato da Giovanni Paradiso</b> <span class="version">v.3.0.2</span>
+    <b>Creato da Giovanni Paradiso</b> <span class="version">v.3.0.3</span>
     <span class="tagline">Ecommerce Specialist, Web Developer &amp; Marketer</span>
     <div style="margin-top:8px">
       <span class="copy-email" onclick="copyEmail(this,'gioparadiso95@gmail.com')">gioparadiso95@gmail.com<span class="copy-toast">Copiata!</span></span>
@@ -1727,8 +1727,7 @@ function renderPratica(){
     renderPraticaAnswered(proc, ans);
   } else if(ans && ps.subMode === 'sim'){
     document.querySelectorAll('#pratica-options .opt').forEach(function(b){
-      b.disabled = true;
-      if(b.dataset.letter === ans.choice) b.classList.add('selected');
+      b.classList.toggle('selected', b.dataset.letter === ans.choice);
     });
     document.getElementById('pratica-next').classList.remove('hidden');
     document.getElementById('pratica-skip').classList.add('hidden');
@@ -1742,12 +1741,11 @@ function renderPratica(){
 
 function answerPratica(letter){
   const ps = praticaState;
-  if(ps.answers[ps.idx]) return;
+  if(ps.answers[ps.idx] && ps.subMode !== 'sim') return;
   if(ps.subMode === 'sim'){
     ps.answers[ps.idx] = { choice: letter };
     document.querySelectorAll('#pratica-options .opt').forEach(function(b){
-      b.disabled = true;
-      if(b.dataset.letter === letter) b.classList.add('selected');
+      b.classList.toggle('selected', b.dataset.letter === letter);
     });
     document.getElementById('pratica-next').classList.remove('hidden');
     document.getElementById('pratica-skip').classList.add('hidden');
