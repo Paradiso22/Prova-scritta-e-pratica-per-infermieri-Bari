@@ -339,8 +339,9 @@
           <label>Parti dalla procedura n°</label>
           <input type="number" id="pratica-from" min="1" max="204" value="1">
         </div>
-        <div>
-          <button onclick="startPratica(parseInt(document.getElementById('pratica-from').value)||1)">Avvia</button>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button onclick="startPratica(parseInt(document.getElementById('pratica-from').value)||1)">&#9654; Avvia in ordine</button>
+          <button class="btn-sec" onclick="startPraticaRandom(parseInt(document.getElementById('pratica-from').value)||1)">&#128256; Ordine casuale</button>
         </div>
       </div>
     </div>
@@ -1050,7 +1051,7 @@ function sessionModeLabel(s){
     if(s.subMode==='correct') return '✅ Ripasso corrette pratica (proc. '+(s.idx+1)+'/'+s.total+')';
     if(s.subMode==='fav') return '⭐ Preferiti pratica (proc. '+(s.idx+1)+'/'+s.total+')';
     if(s.subMode==='sim') return '📋 Simulazione esame pratica (proc. '+(s.idx+1)+'/'+s.total+')';
-    return '🧺 Prova pratica (proc. n. '+(s.procList ? s.procList[s.idx] : (s.startFrom||1)+s.idx)+')';
+    return (s.random ? '🔀' : '🧺') + ' Prova pratica (proc. n. '+(s.procList ? s.procList[s.idx] : (s.startFrom||1)+s.idx)+')';
   }
   return s.mode==='training' ? 'Allenamento libero' :
     s.mode==='sim' ? ('Simulazione esame · '+s.n+'q') :
@@ -1535,6 +1536,25 @@ function startPratica(fromN){
   for(let i = fromN; i <= data.length; i++) procList.push(i);
   praticaState = {
     mode:'pratica', subMode:'sequential',
+    startFrom: fromN,
+    procList: procList,
+    total: procList.length,
+    idx:0, ok:0, ko:0,
+    finished:false,
+    answers: new Array(procList.length).fill(null)
+  };
+  renderPratica();
+}
+
+function startPraticaRandom(fromN){
+  const data = getPraticaData();
+  fromN = Math.max(1, Math.min(fromN||1, data.length));
+  const base = [];
+  for(let i = fromN; i <= data.length; i++) base.push(i);
+  const procList = shuffle([].concat(base));
+  praticaState = {
+    mode:'pratica', subMode:'sequential',
+    random: true,
     startFrom: fromN,
     procList: procList,
     total: procList.length,
