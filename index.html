@@ -273,7 +273,11 @@
           <h3>&#9989; Ripasso corrette prova pratica</h3>
           <p id="pratica-correct-count-label">0 procedure corrette</p>
         </div>
-        <div class="card" onclick="showPraticaFavorites()">
+        <div class="card" onclick="showPraticaBrowse()">
+          <h3>&#128269; Sfoglia banca dati pratiche</h3>
+          <p>Cerca e leggi tutte le 204 procedure con la sequenza corretta.</p>
+        </div>
+        <div class="card" onclick="startOrResumePraticaFav()">
           <h3>&#11088; Preferiti prova pratica</h3>
           <p id="pratica-fav-count-label">0 procedure preferite</p>
         </div>
@@ -512,12 +516,26 @@
     </div>
   </section>
 
+  <section id="screen-pratica-browse" class="hidden">
+    <div class="card">
+      <h2 style="margin:0 0 10px">&#128269; Sfoglia banca dati pratiche</h2>
+      <input type="text" id="pratica-browse-search" class="search-box" placeholder="Cerca per numero (1-204) o parola chiave...">
+      <div class="filter-row" style="margin-top:10px">
+        <button class="btn-sec" id="pbf-all" onclick="setPraticaBrowseFilter('all')">Tutte</button>
+        <button class="btn-sec" id="pbf-wrong" onclick="setPraticaBrowseFilter('wrong')">Solo sbagliate</button>
+        <button class="btn-sec" id="pbf-correct" onclick="setPraticaBrowseFilter('correct')">Solo corrette</button>
+        <button class="btn-sec" id="pbf-fav" onclick="setPraticaBrowseFilter('fav')">Solo preferite</button>
+      </div>
+      <div id="pratica-browse-list" style="max-height:60vh;overflow:auto;margin-top:10px"></div>
+    </div>
+  </section>
+
   <footer id="app-footer">
     <div class="disclaimer">I quesiti provengono dalla banca dati pubblica pubblicata ufficialmente da ASL Bari sul sito del concorso.</div>
     I tuoi dati vengono salvati solo sul tuo dispositivo personale.<br>
     <span style="font-size:11px;color:var(--muted)">Questa applicazione non raccoglie dati personali né utilizza cookie di profilazione.</span><br>
     <span style="font-size:11px;color:var(--muted)">⚠️ Cancellare la cache o i dati del browser eliminer&agrave; i tuoi progressi.</span><br>
-    <b>Creato da Giovanni Paradiso</b> <span class="version">v.3.0.3</span>
+    <b>Creato da Giovanni Paradiso</b> <span class="version">v.3.0.6</span>
     <span class="tagline">Ecommerce Specialist, Web Developer &amp; Marketer</span>
     <div style="margin-top:8px">
       <span class="copy-email" onclick="copyEmail(this,'gioparadiso95@gmail.com')">gioparadiso95@gmail.com<span class="copy-toast">Copiata!</span></span>
@@ -559,7 +577,7 @@ function loadStore(){
     const s = JSON.parse(localStorage.getItem(LS_KEY) || localStorage.getItem('asl_bari_quiz_v1') || '{}');
     return {
       wrongIds: Array.isArray(s.wrongIds) ? s.wrongIds : [],
-      favorites: Array.isArray(s.favorites) ? s.favorites : [],
+      favorites: Array.isArray(s.favorites) ? s.favorites.map(Number).filter(function(n){ return !isNaN(n) && n > 0; }) : [],
       totalAnswered: s.totalAnswered||0,
       totalCorrect: s.totalCorrect||0,
       perQ: s.perQ||{},
@@ -568,11 +586,13 @@ function loadStore(){
       suspendedOrdered: s.suspendedOrdered || (s.suspended && s.suspended.mode==='ordered' ? s.suspended : null),
       suspendedPratica: s.suspendedPratica || null,
       suspendedPraticaSim: s.suspendedPraticaSim || null,
+      suspendedPraticaFav: s.suspendedPraticaFav || null,
+      suspendedFavorites: s.suspendedFavorites || null,
       wrongPraticaNums: Array.isArray(s.wrongPraticaNums) ? s.wrongPraticaNums : [],
       correctPraticaNums: Array.isArray(s.correctPraticaNums) ? s.correctPraticaNums : [],
       favPraticaNums: Array.isArray(s.favPraticaNums) ? s.favPraticaNums : [],
     };
-  }catch(e){ return {wrongIds:[],favorites:[],totalAnswered:0,totalCorrect:0,perQ:{},history:[],suspendedSim:null,suspendedOrdered:null,suspendedPratica:null,suspendedPraticaSim:null,wrongPraticaNums:[],correctPraticaNums:[],favPraticaNums:[]}; }
+  }catch(e){ return {wrongIds:[],favorites:[],totalAnswered:0,totalCorrect:0,perQ:{},history:[],suspendedSim:null,suspendedOrdered:null,suspendedPratica:null,suspendedPraticaSim:null,suspendedPraticaFav:null,suspendedFavorites:null,wrongPraticaNums:[],correctPraticaNums:[],favPraticaNums:[]}; }
 }
 function saveStore(){ localStorage.setItem(LS_KEY, JSON.stringify(store)); }
 
@@ -589,7 +609,7 @@ function fmtTime(s){
   return String(m).padStart(2,'0')+':'+String(r).padStart(2,'0');
 }
 function show(id){
-  ['screen-home','screen-sim-setup','screen-ordered-setup','screen-pratica-setup','screen-pratica-sim-setup','screen-themes','screen-quiz','screen-result','screen-stats','screen-browse','screen-favorites','screen-pratica','screen-pratica-fav']
+  ['screen-home','screen-sim-setup','screen-ordered-setup','screen-pratica-setup','screen-pratica-sim-setup','screen-themes','screen-quiz','screen-result','screen-stats','screen-browse','screen-favorites','screen-pratica','screen-pratica-fav','screen-pratica-browse']
     .forEach(s => document.getElementById(s).classList.toggle('hidden', s!==id));
   window.scrollTo(0,0);
 }
@@ -1035,14 +1055,14 @@ function sessionModeLabel(s){
   return s.mode==='training' ? 'Allenamento libero' :
     s.mode==='sim' ? ('Simulazione esame · '+s.n+'q') :
     s.mode==='theme' ? ('Tema: '+(s.themeName||'')) :
-    s.mode==='favorites' ? '⭐ Preferiti' :
+    s.mode==='favorites' ? '⭐ Preferiti prova scritta' :
     s.mode==='ordered' ? ('📄 Ordine PDF (quesito '+((s.startFrom||1) + s.idx)+')') :
     s.mode==='correct' ? '✅ Ripasso corrette' :
     'Ripasso sbagliati';
 }
 function saveSession(){
   if(!state || state.finished || !state.items || state.idx >= state.items.length){ return; }
-  if(state.mode !== 'sim' && state.mode !== 'ordered'){ return; }
+  if(state.mode !== 'sim' && state.mode !== 'ordered' && state.mode !== 'favorites'){ return; }
   const snap = JSON.parse(JSON.stringify(state));
   if(state.timerEnd){
     snap.timeLeft = Math.max(0, Math.round((state.timerEnd - Date.now())/1000));
@@ -1050,16 +1070,18 @@ function saveSession(){
   delete snap.timerEnd;
   snap.savedAt = Date.now();
   if(state.mode === 'sim') store.suspendedSim = snap;
-  else store.suspendedOrdered = snap;
+  else if(state.mode === 'ordered') store.suspendedOrdered = snap;
+  else store.suspendedFavorites = snap;
   saveStore();
 }
 function resumeSession(type){
-  const snap = type === 'sim' ? store.suspendedSim : store.suspendedOrdered;
+  const snap = type === 'sim' ? store.suspendedSim : type === 'ordered' ? store.suspendedOrdered : store.suspendedFavorites;
   if(!snap) return;
   if(state && state.items && !state.finished) saveSession();
   state = snap;
   if(type === 'sim') store.suspendedSim = null;
-  else store.suspendedOrdered = null;
+  else if(type === 'ordered') store.suspendedOrdered = null;
+  else store.suspendedFavorites = null;
   saveStore();
   if(typeof state.timeLeft === 'number'){
     state.timerEnd = Date.now() + state.timeLeft*1000;
@@ -1075,6 +1097,8 @@ function discardSession(type){
   else if(type === 'ordered') store.suspendedOrdered = null;
   else if(type === 'pratica') store.suspendedPratica = null;
   else if(type === 'pratica-sim') store.suspendedPraticaSim = null;
+  else if(type === 'pratica-fav') store.suspendedPraticaFav = null;
+  else if(type === 'favorites') store.suspendedFavorites = null;
   saveStore();
   renderResumeCard();
 }
@@ -1085,24 +1109,29 @@ function renderResumeCard(){
     ['sim', store.suspendedSim],
     ['ordered', store.suspendedOrdered],
     ['pratica', store.suspendedPratica],
-    ['pratica-sim', store.suspendedPraticaSim]
+    ['pratica-sim', store.suspendedPraticaSim],
+    ['pratica-fav', store.suspendedPraticaFav],
+    ['favorites', store.suspendedFavorites]
   ].forEach(function(pair){
     const type = pair[0], s = pair[1];
     if(!s) return;
     const isPratica = type === 'pratica';
     const isPraticaSim = type === 'pratica-sim';
-    if(!isPratica && !isPraticaSim && !s.items) return;
+    const isPraticaFav = type === 'pratica-fav';
+    const isPraticaType = isPratica || isPraticaSim || isPraticaFav;
+    if(!isPraticaType && !s.items) return;
     const card = document.createElement('div');
     card.className = 'card resume-card';
     card.style.marginBottom = '12px';
     card.style.cursor = 'pointer';
-    const resumeFn = isPratica ? 'resumePratica()' : isPraticaSim ? 'resumePraticaSim()' : 'resumeSession(\''+type+'\')';
+    const resumeFn = isPratica ? 'resumePratica()' : isPraticaSim ? 'resumePraticaSim()' : isPraticaFav ? 'resumePraticaFav()' : 'resumeSession(\''+type+'\')';
     card.addEventListener('click', function(){
       if(isPratica) resumePratica();
       else if(isPraticaSim) resumePraticaSim();
+      else if(isPraticaFav) resumePraticaFav();
       else resumeSession(type);
     });
-    let detail = (isPratica || isPraticaSim)
+    let detail = isPraticaType
       ? ('Procedura '+(s.idx+1)+' di '+s.total+' · '+(s.ok||0)+' ok · '+(s.ko||0)+' ko')
       : ('Domanda '+(s.idx+1)+' di '+s.items.length);
     if(typeof s.timeLeft === 'number') detail += ' · '+fmtTime(s.timeLeft)+' rimasti';
@@ -1178,6 +1207,7 @@ function endQuiz(forced){
   if(store.history.length>50) store.history.length=50;
   if(state.mode === 'sim') store.suspendedSim = null;
   else if(state.mode === 'ordered') store.suspendedOrdered = null;
+  else if(state.mode === 'favorites') store.suspendedFavorites = null;
   saveStore();
   state.finished = true;
 
@@ -1614,10 +1644,21 @@ function resumePraticaSim(){
   delete praticaState.timeLeft;
   renderPratica();
 }
+function resumePraticaFav(){
+  const snap = store.suspendedPraticaFav;
+  if(!snap) return;
+  praticaState = snap;
+  store.suspendedPraticaFav = null;
+  saveStore();
+  praticaState.timerEnd = null;
+  delete praticaState.timeLeft;
+  renderPratica();
+}
+function startOrResumePraticaFav(){ if(store.suspendedPraticaFav) resumePraticaFav(); else showPraticaFavorites(); }
 
 function savePraticaSession(){
   if(!praticaState || praticaState.finished || praticaState.debrief) return;
-  if(praticaState.subMode !== 'sequential' && praticaState.subMode !== 'sim') return;
+  if(praticaState.subMode !== 'sequential' && praticaState.subMode !== 'sim' && praticaState.subMode !== 'fav') return;
   const snap = JSON.parse(JSON.stringify(praticaState));
   if(praticaState.timerEnd){
     snap.timeLeft = Math.max(0, Math.round((praticaState.timerEnd - Date.now())/1000));
@@ -1625,6 +1666,7 @@ function savePraticaSession(){
   delete snap.timerEnd;
   snap.savedAt = Date.now();
   if(praticaState.subMode === 'sim') store.suspendedPraticaSim = snap;
+  else if(praticaState.subMode === 'fav') store.suspendedPraticaFav = snap;
   else store.suspendedPratica = snap;
   saveStore();
 }
@@ -1877,7 +1919,8 @@ function endPratica(forced){
     });
     saveStore();
   } else {
-    store.suspendedPratica = null;
+    if(ps.subMode === 'fav') store.suspendedPraticaFav = null;
+    else store.suspendedPratica = null;
     saveStore();
   }
   if(praticaTimerInterval){clearInterval(praticaTimerInterval);praticaTimerInterval=null;}
@@ -1916,6 +1959,80 @@ function reviewAllPratica(){
   praticaState.idx = 0;
   renderPratica();
 }
+
+// ============ SFOGLIA BANCA DATI PRATICHE ============
+let praticaBrowseFilter = 'all';
+function showPraticaBrowse(){
+  praticaBrowseFilter = 'all';
+  show('screen-pratica-browse');
+  document.getElementById('pratica-browse-search').value = '';
+  renderPraticaBrowse();
+}
+function setPraticaBrowseFilter(f){
+  praticaBrowseFilter = f;
+  ['all','wrong','correct','fav'].forEach(function(k){
+    const b = document.getElementById('pbf-'+k);
+    if(b) b.classList.toggle('btn-sec', true);
+  });
+  renderPraticaBrowse();
+}
+function renderPraticaBrowse(){
+  const data = getPraticaData();
+  const search = document.getElementById('pratica-browse-search').value.trim().toLowerCase();
+  let list = data.map(function(p,i){ return {proc:p, num:i+1}; });
+  if(praticaBrowseFilter === 'wrong') list = list.filter(function(x){ return store.wrongPraticaNums.includes(x.num); });
+  else if(praticaBrowseFilter === 'correct') list = list.filter(function(x){ return store.correctPraticaNums.includes(x.num); });
+  else if(praticaBrowseFilter === 'fav') list = list.filter(function(x){ return store.favPraticaNums.includes(x.num); });
+  if(search){
+    const numSearch = parseInt(search);
+    list = list.filter(function(x){
+      if(!isNaN(numSearch) && x.num === numSearch) return true;
+      return x.proc.title.toLowerCase().includes(search) ||
+        Object.values(x.proc.steps).some(function(s){ return s.toLowerCase().includes(search); });
+    });
+  }
+  const el = document.getElementById('pratica-browse-list');
+  if(!list.length){ el.innerHTML='<div class="sub">Nessun risultato.</div>'; return; }
+  el.innerHTML = list.slice(0,100).map(function(x){
+    const p = x.proc, n = x.num;
+    const isWrong = store.wrongPraticaNums.includes(n);
+    const isCorrect = store.correctPraticaNums.includes(n);
+    const isFav = store.favPraticaNums.includes(n);
+    const tags = (isWrong?'<span style="color:var(--warn);font-size:11px">&#10007; sbagliata</span> ':'')
+      + (isCorrect?'<span style="color:var(--ok);font-size:11px">&#10003; corretta</span> ':'');
+    const stepNums = Object.keys(p.steps).map(Number).sort(function(a,b){return a-b;});
+    const stepsHtml = stepNums.map(function(sn){
+      return '<div style="display:flex;gap:6px;margin-bottom:3px"><span style="color:var(--accent);font-weight:700;min-width:18px;font-size:12px">'+sn+'.</span><span style="font-size:12px">'+escapeHtml(p.steps[String(sn)])+'</span></div>';
+    }).join('');
+    const corrSeq = p.correctSeq ? escapeHtml(p.correctSeq.join(' - ')) : '';
+    return '<div class="review-item" style="cursor:pointer" onclick="togglePraticaBrowseDetail(this)">'+
+      '<div class="item-head">'+
+        '<div class="sub">Proc. '+n+' &nbsp;'+tags+'</div>'+
+        '<button class="fav-star'+(isFav?' active':'')+'" onclick="event.stopPropagation();toggleFavPraticaBrowse('+n+',this)" title="'+(isFav?'Rimuovi':'Aggiungi a')+'i preferiti">'+(isFav?'&#9733;':'&#9734;')+'</button>'+
+      '</div>'+
+      '<div class="q" style="font-size:14px">'+escapeHtml(p.title)+'</div>'+
+      '<div class="pratica-browse-detail hidden" style="margin-top:10px">'+
+        '<div style="background:var(--card2);border-radius:8px;padding:10px;margin-bottom:8px">'+stepsHtml+'</div>'+
+        (corrSeq?'<div class="a">&#10003; Sequenza corretta: '+corrSeq+'</div>':'')+
+      '</div>'+
+    '</div>';
+  }).join('') + (list.length>100?'<div class="sub" style="text-align:center;margin-top:8px">Mostrati 100 di '+list.length+'. Affina la ricerca.</div>':'');
+}
+function togglePraticaBrowseDetail(el){
+  const d = el.querySelector('.pratica-browse-detail');
+  if(d) d.classList.toggle('hidden');
+}
+function toggleFavPraticaBrowse(num, btn){
+  const idx = store.favPraticaNums.indexOf(num);
+  if(idx>=0) store.favPraticaNums.splice(idx,1);
+  else store.favPraticaNums.push(num);
+  saveStore();
+  const isFav = store.favPraticaNums.includes(num);
+  btn.classList.toggle('active', isFav);
+  btn.innerHTML = isFav ? '&#9733;' : '&#9734;';
+  btn.title = isFav ? 'Rimuovi dai preferiti' : 'Aggiungi ai preferiti';
+}
+document.getElementById('pratica-browse-search').addEventListener('input', function(){ renderPraticaBrowse(); });
 
 // ============ TEMA CHIARO/SCURO ============
 const THEME_KEY = 'asl_bari_quiz_theme';
